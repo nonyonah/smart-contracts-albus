@@ -1,4 +1,4 @@
-# Sample Hardhat Project
+# Smart Contracts for Albus
 
 This project are smart contracts created for the albus budgeting app.
 Try running some of the following tasks:
