@@ -33,13 +33,13 @@ contract BudgetTracker is ExpenseTracker, IncomeTracker {
     }
 
     // Override function to add expense and update budget
-    function addExpense(uint256 _amount, string memory _category) public override {
+    function addExpense(uint256 _amount, string memory _category) public override(ExpenseTracker) {
         super.addExpense(_amount, _category);
         updateBudget();
     }
 
     // Override function to add income and update budget
-    function addIncome(uint256 _amount, string memory _source) public override {
+    function addIncome(uint256 _amount, string memory _source) public override(IncomeTracker) {
         super.addIncome(_amount, _source);
         updateBudget();
     }

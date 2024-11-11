@@ -12,11 +12,13 @@ contract IncomeTracker {
 
     event IncomeAdded(address indexed user, uint256 amount, string source, uint256 date);
 
-    function addIncome(uint256 _amount, string memory _source) public {
+    // Add virtual keyword to allow overriding
+    function addIncome(uint256 _amount, string memory _source) virtual {
         require(_amount > 0, "Amount must be greater than zero");
         require(bytes(_source).length > 0, "Source cannot be empty");
 
         incomes[msg.sender].push(Income(_amount, _source, block.timestamp));
+
         emit IncomeAdded(msg.sender, _amount, _source, block.timestamp);
     }
 
@@ -39,10 +41,5 @@ contract IncomeTracker {
 
     function clearIncomes() public {
         delete incomes[msg.sender];
-    }
-
-    function getLatestIncome() public view returns (Income memory) {
-        require(incomes[msg.sender].length > 0, "No income records found");
-        return incomes[msg.sender][incomes[msg.sender].length - 1];
     }
 }
