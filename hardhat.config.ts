@@ -1,33 +1,46 @@
-import { HardhatUserConfig } from 'hardhat/config';
-import '@nomicfoundation/hardhat-toolbox';
+import { HardhatUserConfig } from "hardhat/config";
+import "@nomicfoundation/hardhat-toolbox";
+import * as dotenv from "dotenv";
 
-require('dotenv').config();
+dotenv.config();
 
 const config: HardhatUserConfig = {
   solidity: {
-    version: '0.8.23',
+    version: "0.8.21",
+    settings: {
+      optimizer: {
+        enabled: true,
+        runs: 200,
+      },
+    },
+  },  networks: {
+    hardhat: {
+      chainId: 31337
+    },
+    localhost: {
+      chainId: 31337,
+      url: "http://127.0.0.1:8545"
+    },
+    baseSepolia: process.env.PRIVATE_KEY ? {
+      url: process.env.BASE_SEPOLIA_RPC || "https://sepolia.base.org",
+      accounts: [process.env.PRIVATE_KEY],
+    } : undefined,
   },
-  networks: {
-    // for mainnet
-    'base-mainnet': {
-      url: 'https://mainnet.base.org',
-      accounts: [process.env.WALLET_KEY as string],
-      gasPrice: 1000000000,
+  etherscan: {
+    apiKey: {
+      baseSepolia: process.env.ETHERSCAN_API_KEY || "",
     },
-    // for testnet
-    'base-sepolia': {
-      url: 'https://sepolia.base.org',
-      accounts: [process.env.WALLET_KEY as string],
-      gasPrice: 1000000000,
-    },
-    // for local dev environment
-    'base-local': {
-      url: 'http://localhost:8545',
-      accounts: [process.env.WALLET_KEY as string],
-      gasPrice: 1000000000,
-    },
+    customChains: [
+      {
+        network: "baseSepolia",
+        chainId: 84532,
+        urls: {
+          apiURL: "https://api-sepolia.basescan.org/api",
+          browserURL: "https://sepolia.basescan.org",
+        },
+      },
+    ],
   },
-  defaultNetwork: 'hardhat',
 };
 
 export default config;

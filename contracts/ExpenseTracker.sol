@@ -1,108 +1,115 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.21;
 
-contract ExpenseTracker {
+import "./interfaces/IERC20.sol";
+import "./interfaces/ISharedErrors.sol";
+
+/**
+ * @title ExpenseTracker
+ * @dev Tracks expenses with support for multiple tokens and categories
+ */
+contract ExpenseTracker is ISharedErrors {
     struct Expense {
-        uint256 amount;
-        string category;
-        uint256 date;
+        address token;      // The token used for the expense (address(0) for native currency)
+        uint256 amount;    // Amount in token's smallest unit
+        string category;   // Category of expense
+        uint256 date;     // Timestamp of expense
+        string notes;     // Optional notes for the expense
     }
 
-    mapping(address => Expense[]) private expenses;
-    mapping(address => mapping(string => uint256)) private categoryTotals;
-
-    event ExpenseAdded(address indexed user, uint256 amount, string category, uint256 date);
-    event ExpensesCleared(address indexed user, uint256 totalCleared);
-    event CategoryLimitExceeded(address indexed user, string category, uint256 categoryTotal);
-
-    uint256 private constant MAX_CATEGORY_LIMIT = 1000 ether; // Example limit per category
-    uint256 private constant MAX_STRING_LENGTH = 50;
-
-    // Add virtual keyword to allow overriding
-    function addExpense(uint256 _amount, string memory _category) public virtual {
-        require(_amount > 0, "Amount must be greater than zero");
-        require(bytes(_category).length > 0, "Category cannot be empty");
-        require(bytes(_category).length <= MAX_STRING_LENGTH, "Category name too long");
-        require(_amount <= type(uint256).max - categoryTotals[msg.sender][_category], "Amount would cause overflow");
-
-        // Update category total
-        categoryTotals[msg.sender][_category] += _amount;
-
-        // Check if category limit is exceeded
-        if (categoryTotals[msg.sender][_category] > MAX_CATEGORY_LIMIT) {
-            emit CategoryLimitExceeded(msg.sender, _category, categoryTotals[msg.sender][_category]);
-        }
-
-        expenses[msg.sender].push(Expense(_amount, _category, block.timestamp));
-        emit ExpenseAdded(msg.sender, _amount, _category, block.timestamp);
+    struct CategoryBudget {
+        uint256 limit;     // Monthly limit for this category
+        uint256 spent;     // Amount spent this month
+        uint256 month;     // Current tracking month
     }
 
-    function getExpenses() public view returns (Expense[] memory) {
-        return expenses[msg.sender];
-    }
+    mapping(address => Expense[]) private userExpenses;
+    mapping(address => mapping(string => CategoryBudget)) private categoryBudgets;
+    mapping(address => mapping(address => bool)) private approvedTokens;
+    
+    event ExpenseAdded(
+        address indexed user,
+        address indexed token,
+        uint256 amount,
+        string category,
+        uint256 date
+    );
+    event CategoryBudgetSet(
+        address indexed user,
+        string category,
+        uint256 limit
+    );
+    event TokenApproved(
+        address indexed user,
+        address indexed token,
+        bool approved
+    );    error CategoryLimitExceeded(string category, uint256 limit, uint256 attempted);
 
-    function getTotalExpenses() public view returns (uint256) {
-        Expense[] memory userExpenses = expenses[msg.sender];
-        uint256 total = 0;
+    constructor() {}    function addExpense(
+        address token,
+        uint256 amount,
+        string calldata category,
+        string calldata notes
+    ) external virtual {
+        if (amount == 0) revert InvalidAmount();
+        if (!approvedTokens[msg.sender][token]) revert UnapprovedToken(token);
+
+        // Update category budget
+        CategoryBudget storage budget = categoryBudgets[msg.sender][category];
+        uint256 currentMonth = block.timestamp / 30 days;
         
-        for (uint256 i = 0; i < userExpenses.length; i++) {
-            require(total <= type(uint256).max - userExpenses[i].amount, "Total would overflow");
-            total += userExpenses[i].amount;
+        if (currentMonth > budget.month) {
+            budget.spent = 0;
+            budget.month = currentMonth;
         }
-        return total;
-    }
 
-    function getCategoryTotal(string memory _category) public view returns (uint256) {
-        return categoryTotals[msg.sender][_category];
-    }
+        if (budget.limit > 0 && budget.spent + amount > budget.limit) {
+            revert CategoryLimitExceeded(category, budget.limit, amount);
+        }
 
-    function getExpenseCount() public view returns (uint256) {
-        return expenses[msg.sender].length;
-    }
-
-    function clearExpenses() public {
-        uint256 totalCleared = getTotalExpenses();
-        delete expenses[msg.sender];
+        budget.spent += amount;
         
-        // Clear category totals
-        string[] memory categories = getUniqueCategories();
-        for (uint256 i = 0; i < categories.length; i++) {
-            delete categoryTotals[msg.sender][categories[i]];
-        }
-        
-        emit ExpensesCleared(msg.sender, totalCleared);
+        // Record expense
+        userExpenses[msg.sender].push(Expense({
+            token: token,
+            amount: amount,
+            category: category,
+            date: block.timestamp,
+            notes: notes
+        }));
+
+        emit ExpenseAdded(msg.sender, token, amount, category, block.timestamp);
     }
 
-    function getUniqueCategories() public view returns (string[] memory) {
-        Expense[] memory userExpenses = expenses[msg.sender];
-        bool[] memory seen = new bool[](userExpenses.length);
-        uint256 uniqueCount = 0;
+    function setCategoryBudget(string calldata category, uint256 limit) external {
+        categoryBudgets[msg.sender][category].limit = limit;
+        emit CategoryBudgetSet(msg.sender, category, limit);
+    }
 
-        // Count unique categories
-        for (uint256 i = 0; i < userExpenses.length; i++) {
-            bool isUnique = true;
-            for (uint256 j = 0; j < i; j++) {
-                if (keccak256(bytes(userExpenses[i].category)) == keccak256(bytes(userExpenses[j].category))) {
-                    isUnique = false;
-                    break;
-                }
-            }
-            if (isUnique) {
-                seen[i] = true;
-                uniqueCount++;
-            }
-        }
+    function approveToken(address token, bool approved) external virtual {
+        approvedTokens[msg.sender][token] = approved;
+        emit TokenApproved(msg.sender, token, approved);
+    }
 
-        // Create array of unique categories
-        string[] memory categories = new string[](uniqueCount);
-        uint256 index = 0;
-        for (uint256 i = 0; i < userExpenses.length; i++) {
-            if (seen[i]) {
-                categories[index] = userExpenses[i].category;
-                index++;
-            }
-        }
+    function getExpenses() external view virtual returns (Expense[] memory) {
+        return userExpenses[msg.sender];
+    }
 
-        return categories;
+    function getCategoryBudget(string calldata category)
+        external
+        view
+        returns (CategoryBudget memory)
+    {
+        return categoryBudgets[msg.sender][category];
+    }
+
+    function isTokenApproved(address user, address token)
+        external
+        view
+        virtual
+        returns (bool)
+    {
+        return approvedTokens[user][token];
     }
 }
+
