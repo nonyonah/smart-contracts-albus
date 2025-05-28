@@ -2,7 +2,6 @@
 pragma solidity ^0.8.21;
 
 import "./interfaces/IERC20.sol";
-import "./BudgetTracker.sol";
 
 
 contract InvoiceManager {
@@ -15,10 +14,9 @@ contract InvoiceManager {
         uint256 amount;
         uint256 dueDate;
         bool paid;
-        string category;    // For budget tracking
+        string category;    // For categorization
     }    uint256 public nextInvoiceId;
     mapping(uint256 => Invoice) public invoices;
-    BudgetTracker public budgetTracker;
 
     event InvoiceCreated(
         uint256 indexed id,
@@ -27,13 +25,22 @@ contract InvoiceManager {
         uint256 amount,
         uint256 dueDate,
         string category
-    );
-    event InvoicePaid(uint256 indexed id);
-    
+    );    event InvoicePaid(uint256 indexed id);
+    event PaymentProcessorUpdated(address indexed processor, bool authorized);
+
     error InvalidAmount();
-    error UnauthorizedPayer();    constructor(address _budgetTracker) {
+    error UnauthorizedPayer();
+    error Unauthorized();
+
+    modifier onlyOwner() {
+        if (msg.sender != owner) revert Unauthorized();
+        _;
+    }
+
+    mapping(address => bool) public authorizedPaymentProcessors;
+
+    constructor() {
         owner = msg.sender;
-        budgetTracker = BudgetTracker(payable(_budgetTracker));
     }
 
     function createInvoice(
@@ -57,20 +64,19 @@ contract InvoiceManager {
 
         emit InvoiceCreated(nextInvoiceId, client, token, amount, dueDate, category);
         nextInvoiceId++;
-    }    function markAsPaid(uint256 invoiceId) external {
+    }    function setPaymentProcessor(address processor, bool authorized) external onlyOwner {
+        authorizedPaymentProcessors[processor] = authorized;
+        emit PaymentProcessorUpdated(processor, authorized);
+    }
+
+    function markAsPaid(uint256 invoiceId) external {
         Invoice storage invoice = invoices[invoiceId];
-        require(!invoice.paid, "Already paid");
-        require(msg.sender == invoice.client || msg.sender == owner, "Unauthorized");
+        if (invoice.paid) revert("Already paid");
+        if (!authorizedPaymentProcessors[msg.sender] && msg.sender != invoice.client && msg.sender != owner) {
+            revert Unauthorized();
+        }
         
-        invoice.paid = true;
-        
-        // Record the payment in the budget tracker as income
-        budgetTracker.addIncome(
-            invoice.token,
-            invoice.amount,
-            string(abi.encodePacked("Invoice #", uint256ToString(invoiceId)))
-        );
-        
+        invoice.paid = true;        
         emit InvoicePaid(invoiceId);
     }
 
@@ -96,28 +102,5 @@ contract InvoiceManager {
         }
 
         return dueInvoices;
-    }
-
-    // Utility function to convert uint to string
-    function uint256ToString(uint256 value) internal pure returns (string memory) {
-        if (value == 0) {
-            return "0";
-        }
-        
-        uint256 temp = value;
-        uint256 digits;
-        while (temp != 0) {
-            digits++;
-            temp /= 10;
-        }
-        
-        bytes memory buffer = new bytes(digits);
-        while (value != 0) {
-            digits -= 1;
-            buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
-            value /= 10;
-        }
-        
-        return string(buffer);
     }
 }

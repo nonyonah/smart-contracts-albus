@@ -1,6 +1,6 @@
 # Albus Smart Contracts
 
-This repository contains the smart contracts for the Albus budgeting app, built with Hardhat.
+This repository contains the smart contracts for the Albus payment and invoice management system, built with Hardhat.
 
 ## Available Scripts
 
@@ -23,9 +23,6 @@ npm run deploy:baseSepolia # Deploy to Base Sepolia testnet
 
 ## Contract Architecture
 
-- `BudgetTracker.sol`: Main contract for budget management
-- `ExpenseTracker.sol`: Tracks user expenses
-- `IncomeTracker.sol`: Tracks user income
 - `InvoiceManager.sol`: Handles invoice creation and management
 - `PaymentTracker.sol`: Tracks payments and transactions
-- `TokenSwapManager.sol`: Manages token swaps and conversions
+- `TokenSwapManager.sol`: Manages token swaps and conversions for multi-currency support

@@ -2,7 +2,6 @@
 pragma solidity ^0.8.21;
 
 import "./interfaces/IERC20.sol";
-import "./BudgetTracker.sol";
 
 
 
@@ -27,16 +26,13 @@ contract TokenSwapManager {    address public owner;
         uint256 amountOut,
         string category
     );
-
-    BudgetTracker public budgetTracker;
     
     error InvalidAmount();
     error SwapFailed();
-    error Unauthorized();    constructor(address _router, address _stableToken, address _budgetTracker) {
+    error Unauthorized();    constructor(address _router, address _stableToken) {
         owner = msg.sender;
         router = _router;
         stableToken = _stableToken;
-        budgetTracker = BudgetTracker(payable(_budgetTracker));
     }
 
     function swapToStable(
@@ -71,13 +67,8 @@ contract TokenSwapManager {    address public owner;
         );
 
         emit TokenSwapped(msg.sender, fromToken, amountIn, amounts[1], category);
-        
-        // Record the swap as income in the budget tracker
-        budgetTracker.addIncome(stableToken, amounts[1], "Token Swap");
-    }
-
-    function setStableToken(address newStable) external {
-        require(msg.sender == owner, "Unauthorized");
+    }    function setStableToken(address newStable) external {
+        if (msg.sender != owner) revert Unauthorized();
         stableToken = newStable;
     }
 }
